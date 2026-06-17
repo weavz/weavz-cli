@@ -68,57 +68,53 @@ Credentials are stored per profile with owner-only file permissions. The config 
 
 ## Quick Start
 
-Check the active profile:
+Sign in, then let the CLI summarize the current workspace for an agent or a human:
 
 ```bash
-weavz status
-weavz whoami --json
+weavz login
+weavz agent context --json
 ```
 
-List configured apps:
+Discover the action you need:
 
 ```bash
-weavz apps list
+weavz actions search "send gmail email" --json
 ```
 
-Search the app catalog:
+Inspect the exact input contract for one canonical action id:
 
 ```bash
-weavz apps search slack
-weavz apps search "google sheets"
+weavz actions info customer_gmail.send_email --json
 ```
 
-Add an app to the connected workspace:
+Validate input before side effects:
 
 ```bash
-weavz apps add slack --alias team_slack
+weavz actions validate customer_gmail.send_email \
+  --set to=person@example.com \
+  --set subject="Hello from Weavz" \
+  --set body="Hi, this was sent through Weavz." \
+  --json
 ```
 
-Connect your user account for an app alias:
+Execute the action:
 
 ```bash
-weavz apps connect team_slack
+weavz run customer_gmail.send_email \
+  --set to=person@example.com \
+  --set subject="Hello from Weavz" \
+  --set body="Hi, this was sent through Weavz." \
+  --idempotency-key email-demo-001 \
+  --json
 ```
 
-Search available agent tools:
-
-```bash
-weavz tools search "slack gmail storage"
-```
-
-Inspect TypeScript declarations for an alias:
-
-```bash
-weavz tools api team_slack
-```
-
-Execute Code Mode JavaScript:
+Use Code Mode JavaScript only when a workflow needs multiple app calls, loops, joins, or transformations:
 
 ```bash
 weavz exec 'return { ok: true, now: new Date().toISOString() }'
 ```
 
-Pipe a larger script:
+Pipe a larger multi-step script:
 
 ```bash
 cat <<'JS' | weavz exec --json
@@ -173,6 +169,17 @@ weavz status
 weavz whoami --json
 ```
 
+### `weavz agent`
+
+Print a bounded, agent-ready workspace snapshot or an installable instruction file:
+
+```bash
+weavz agent context [--query <intent>] [--limit <n>] [--json]
+weavz agent skill [--format codex|claude|generic]
+```
+
+`agent context` includes the active profile, workspace, connected apps, matching canonical action ids, the required discovery flow, and recovery commands. It is designed so agents can bootstrap without reading this whole README.
+
 ### `weavz apps`
 
 Manage apps attached to the connected Weavz workspace.
@@ -188,6 +195,60 @@ weavz apps dashboard [--json]
 ```
 
 Aliases are the stable names agents use in Code Mode, such as `team_slack`, `customer_gmail`, or `billing_stripe`.
+
+### `weavz actions`
+
+Discover, inspect, validate, and execute one canonical action at a time:
+
+```bash
+weavz actions list [--limit <n>] [--json]
+weavz actions search <query> [--limit <n>] [--json]
+weavz actions info <alias.action> [--json]
+weavz actions options <alias.action> <property> [--search <text>] [--input <json|@file|->] [--json]
+weavz actions validate <alias.action> [--input <json|@file|->] [--set <path=value>] [--set-json <path=json>] [--json]
+weavz actions exec <alias.action> [input flags] [--dry-run] [--explain] [--idempotency-key <key>] [--timeout <seconds>] [--wait-for-approval-seconds <0-60>] [--json]
+weavz run <alias.action> [input flags] [--dry-run] [--explain] [--idempotency-key <key>] [--json]
+```
+
+Canonical ids are `alias.functionName`, where `functionName` is the safe action name returned by `actions search`. Search can use natural language; execution never does. If a query returns several matches, pick one id and inspect it with `actions info`.
+
+Input precedence is:
+
+1. Base JSON from `--input`.
+2. Repeatable scalar updates from `--set path=value`.
+3. Repeatable JSON updates from `--set-json path=json`.
+
+Input sources:
+
+```bash
+weavz run customer_gmail.send_email --input '{"to":"person@example.com","subject":"Hi","body":"Hello"}'
+weavz run customer_gmail.send_email --input @email.json --json
+cat email.json | weavz run customer_gmail.send_email --input - --json
+weavz run team_slack.send_channel_message --set channel=C123 --set text="Deploy complete" --json
+weavz run sheets.add_row --set-json 'values=["Acme",42,true]' --json
+weavz run crm.create_contact --set address.city=Berlin --set tags[]=lead --set tags[]=trial --json
+```
+
+Dry-run and explain are read-only:
+
+```bash
+weavz actions exec customer_gmail.send_email --input @email.json --dry-run --json
+weavz actions exec customer_gmail.send_email --input @email.json --explain
+```
+
+Resolve dynamic options before validation when a field advertises an options lookup:
+
+```bash
+weavz actions options team_slack.send_channel_message channel --search eng --json
+```
+
+If an action requires approval, the JSON envelope has `status: "approval_required"`, an `approval` object, links, and a `requestId` when available. Show the approval URL, then retry the same command with the same input and idempotency key after approval. To keep polling briefly:
+
+```bash
+weavz run customer_gmail.send_email --input @email.json --idempotency-key email-001 --wait-for-approval-seconds 30 --json
+```
+
+Direct action JSON output is always an envelope with stable keys: `status`, `id`, `alias`, `actionName`, `integrationName`, `inputKeys`, `output`, `approval`, `links`, `timings`, `requestId`, and `error`.
 
 ### `weavz tools`
 
@@ -215,19 +276,34 @@ Top-level `await` and `return` are supported by Weavz Code Mode. For workflows t
 
 ## Agent Usage
 
-Agents should treat the CLI as a narrow MCP connector command surface:
+Agents should use the direct action path first:
 
-1. Run `weavz status --json` to confirm the active profile and workspace.
-2. Run `weavz tools search "<task intent>" --json` to discover relevant aliases and actions.
-3. Run `weavz tools api <alias> --json` for declarations before calling unfamiliar actions.
-4. Run one `weavz exec` script for the workflow and return structured JSON.
-5. If `weavz exec` reports an approval requirement, surface the approval link or instruction to the user, then continue with `weavz exec --approval-id <apr_...> --wait-for-approval-seconds 30 --json`.
+1. Run `weavz agent context --query "<task intent>" --json` to confirm workspace and get matching canonical ids.
+2. Run `weavz actions search "<task intent>" --json` if more discovery is needed.
+3. Run `weavz actions info <alias.action> --json`.
+4. Build input as JSON, then run `weavz actions validate <alias.action> --input @input.json --json`.
+5. Execute with `weavz run <alias.action> --input @input.json --idempotency-key <stable-key> --json`.
+6. Use `weavz exec` only when the task genuinely needs a multi-step JavaScript workflow.
 
 Example agent flow:
 
 ```bash
-weavz tools search "read support slack summarize recent escalations" --json
-weavz tools api support_slack --json
+weavz actions search "send slack message" --json
+weavz actions info support_slack.send_channel_message --json
+weavz actions validate support_slack.send_channel_message \
+  --set channel=C123456 \
+  --set text="The build is green." \
+  --json
+weavz run support_slack.send_channel_message \
+  --set channel=C123456 \
+  --set text="The build is green." \
+  --idempotency-key build-green-20260617 \
+  --json
+```
+
+Code Mode remains useful for multi-action workflows:
+
+```bash
 weavz exec --json <<'JS'
 const messages = await weavz.support_slack.search_messages({
   query: "escalation after:2026-06-01"
