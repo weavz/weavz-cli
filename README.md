@@ -64,7 +64,7 @@ weavz login --host https://platform.weavz.io
 weavz login --host http://localhost:3000 --profile local
 ```
 
-Credentials are stored per profile in `~/.weavz/credentials.json` with owner-only file permissions. Stored tokens are MCP OAuth tokens scoped to the Weavz MCP connector; they do not grant access to public REST APIs. Public REST APIs still require a `WEAVZ_API_KEY` with the `wvz_` prefix.
+Credentials are stored per profile with owner-only file permissions. The config directory is selected in this order: `WEAVZ_CONFIG_DIR`, `$XDG_CONFIG_HOME/weavz`, then `~/.weavz`. Stored tokens are MCP OAuth tokens scoped to the Weavz MCP connector; they do not grant access to public REST APIs. Public REST APIs still require a `WEAVZ_API_KEY` with the `wvz_` prefix.
 
 ## Quick Start
 
@@ -182,6 +182,9 @@ weavz apps list [--json]
 weavz apps search <query> [--json]
 weavz apps add <integration-name> [--alias <alias>] [--json]
 weavz apps connect <alias> [--json]
+weavz apps disconnect <alias> --confirm [--json]
+weavz apps remove <alias> --confirm [--keep-connection] [--json]
+weavz apps dashboard [--json]
 ```
 
 Aliases are the stable names agents use in Code Mode, such as `team_slack`, `customer_gmail`, or `billing_stripe`.
@@ -193,7 +196,7 @@ Discover and inspect the MCP tools exposed by the connected workspace.
 ```bash
 weavz tools list [--json]
 weavz tools search [query] [--json]
-weavz tools api <alias> [alias...] [--action <action>] [--json]
+weavz tools api <alias> [alias...] [--action <action>] [--actions a,b] [--detail full|signatures] [--json]
 ```
 
 Use `tools search` first when you do not know which aliases or actions are available. Use `tools api` before writing Code Mode scripts against unfamiliar aliases.
@@ -205,6 +208,7 @@ Run JavaScript through Weavz Code Mode.
 ```bash
 weavz exec 'return await weavz.storage.list({ path: "" })'
 weavz exec --json < script.js
+weavz exec --approval-id apr_123 --wait-for-approval-seconds 30 --json
 ```
 
 Top-level `await` and `return` are supported by Weavz Code Mode. For workflows that involve several app calls, prefer one `weavz exec` script that fetches, transforms, and returns the result instead of many small calls.
@@ -217,7 +221,7 @@ Agents should treat the CLI as a narrow MCP connector command surface:
 2. Run `weavz tools search "<task intent>" --json` to discover relevant aliases and actions.
 3. Run `weavz tools api <alias> --json` for declarations before calling unfamiliar actions.
 4. Run one `weavz exec` script for the workflow and return structured JSON.
-5. If `weavz exec` reports an approval requirement, surface the approval link or instruction to the user and retry the approved run when appropriate.
+5. If `weavz exec` reports an approval requirement, surface the approval link or instruction to the user, then continue with `weavz exec --approval-id <apr_...> --wait-for-approval-seconds 30 --json`.
 
 Example agent flow:
 
@@ -256,8 +260,8 @@ The OAuth token is scoped to MCP connector usage. It is not a Weavz REST API key
 
 - Do not commit `~/.weavz/credentials.json`.
 - Use separate profiles for development, staging, and production.
-- Use `--host http://localhost:3000 --profile local` for local API development.
-- For CI automation, prefer purpose-scoped service credentials or API keys where possible. The CLI login flow is designed for interactive users and agents acting with user approval.
+- Use `--host http://localhost:3000 --profile local` for local development against a self-hosted Weavz API.
+- For CI automation, prefer purpose-scoped Weavz API keys where possible. The CLI login flow is designed for interactive users and agents acting with user approval.
 - If a credential is exposed, run `weavz logout --profile <name>` locally and revoke/reconnect the MCP connector from Weavz.
 
 ## Troubleshooting
@@ -292,18 +296,9 @@ export WEAVZ_PROFILE=my-profile
 
 This is expected. CLI tokens are MCP OAuth tokens for `/mcp/weavz`. Use the SDKs or REST API with `WEAVZ_API_KEY` for public API routes.
 
-## Development
+## Issues
 
-This repository is a sanitized release mirror. Day-to-day development happens in the Weavz monorepo under `packages/cli/`.
-
-Useful local commands from the monorepo:
-
-```bash
-npm run typecheck:cli
-npm test --workspace=@weavz-io/cli
-npm run build:cli
-npm run pack:cli
-```
+Report CLI issues in the [weavz-cli repository](https://github.com/weavz/weavz-cli/issues). Include `weavz --version`, your operating system, whether you are running locally or over SSH/container/cloud IDE, and the command output with secrets removed.
 
 ## License
 

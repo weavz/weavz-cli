@@ -93,14 +93,16 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
           if npm view "@weavz-io/cli@${version}" version >/dev/null 2>&1; then
-            echo "@weavz-io/cli@${version} is already published"
-            exit 1
+            echo "@weavz-io/cli@${version} is already published; release finalization will be idempotent"
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
           fi
 
           npm pack --dry-run
 
       - name: Publish to npm
-        if: inputs.dry_run == false
+        if: inputs.dry_run == false && steps.package.outputs.already_published != 'true'
         run: |
           if [ -n "$NODE_AUTH_TOKEN" ]; then
             npm publish --access public --provenance --tag "$NPM_TAG"
@@ -117,8 +119,14 @@ jobs:
         run: |
           tag="v${VERSION}"
           if git rev-parse "$tag" >/dev/null 2>&1; then
-            echo "Git tag ${tag} already exists"
-            exit 1
+            existing="$(git rev-parse "$tag")"
+            current="$(git rev-parse HEAD)"
+            if [ "$existing" != "$current" ]; then
+              echo "Git tag ${tag} already exists at ${existing}, not current commit ${current}"
+              exit 1
+            fi
+            echo "Git tag ${tag} already exists on this commit"
+            exit 0
           fi
 
           git config user.name "github-actions[bot]"
@@ -131,6 +139,10 @@ jobs:
       - name: Create GitHub release
         if: inputs.dry_run == false
         run: |
+          if gh release view "v${VERSION}" >/dev/null 2>&1; then
+            echo "GitHub release v${VERSION} already exists"
+            exit 0
+          fi
           gh release create "v${VERSION}" \
             --title "@weavz-io/cli v${VERSION}" \
             --notes "Published @weavz-io/cli@${VERSION} to npm."
