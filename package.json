@@ -1,0 +1,46 @@
+{
+  "name": "@weavz-io/cli",
+  "version": "0.1.0",
+  "description": "Command-line interface for Weavz MCP connector workflows",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://weavz.io/docs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/weavz/weavz-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/weavz/weavz-cli/issues"
+  },
+  "keywords": [
+    "weavz",
+    "cli",
+    "mcp",
+    "agents",
+    "oauth"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "weavz": "dist/cli.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "test": "npm run build && vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "esbuild": "0.28.0",
+    "typescript": "^5.7.3"
+  }
+}
