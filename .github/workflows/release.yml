@@ -83,6 +83,11 @@ jobs:
         id: package
         run: |
           test -f dist/cli.mjs
+          test -f cli
+          test -f install.sh
+          test -f CNAME
+          sh -n cli
+          cmp -s cli install.sh
           node dist/cli.mjs --help
           version="$(node -p "require('./package.json').version")"
           actual="$(node dist/cli.mjs --version)"
@@ -141,9 +146,9 @@ jobs:
           popd >/dev/null
           rm -rf "$install_dir" "$pack_file"
 
-          if grep -RInE 'X-Service-Key|service credentials|BetterAuth|QuickJS|Cloudflare|Wrangler|Drizzle|BullMQ|DATABASE_URL|SERVICE_KEY' README.md package.json dist LICENSE >/tmp/weavz-cli-release-denylist; then
-            echo "Public CLI package contains denied internal terms."
-            cat /tmp/weavz-cli-release-denylist
+          if grep -RIlE 'X-Service-Key|service credentials|BetterAuth|QuickJS|Cloudflare|Wrangler|Drizzle|BullMQ|DATABASE_URL|SERVICE_KEY' README.md package.json dist LICENSE cli install.sh CNAME >/tmp/weavz-cli-release-denylist; then
+            echo "Public CLI package contains denied internal terms in:"
+            sed 's#^\./##' /tmp/weavz-cli-release-denylist
             exit 1
           fi
         env:

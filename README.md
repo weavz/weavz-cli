@@ -20,6 +20,39 @@ The CLI signs in with an OAuth device-code flow, stores a scoped MCP OAuth token
 
 ## Installation
 
+Install with Homebrew on macOS or Linux:
+
+```bash
+brew install weavz/tap/weavz
+weavz --version
+weavz login
+```
+
+Bootstrap with curl when you want a direct installer:
+
+```bash
+curl -fsSL https://get.weavz.io/cli | sh
+export PATH="$HOME/.weavz/bin:$PATH"
+weavz --version
+weavz login
+```
+
+The curl installer downloads the published npm bundle, installs it under `~/.weavz`, links `~/.weavz/bin/weavz`, and adds an idempotent Weavz-managed PATH block to your shell config. It backs up any edited file first and prints the exact command to update PATH in the current shell.
+
+Install a specific version or custom location:
+
+```bash
+curl -fsSL https://get.weavz.io/cli | WEAVZ_VERSION=0.2.4 sh
+curl -fsSL https://get.weavz.io/cli | WEAVZ_INSTALL_DIR="$HOME/.local/share/weavz" sh
+```
+
+For CI, containers, or agents that should not edit shell startup files, skip PATH mutation and call the installed binary directly:
+
+```bash
+curl -fsSL https://get.weavz.io/cli | WEAVZ_NO_PATH_UPDATE=1 sh
+"$HOME/.weavz/bin/weavz" --version
+```
+
 Run without a persistent install:
 
 ```bash
@@ -55,7 +88,7 @@ weavz --version
 
 With `nvm`, global packages are installed per Node.js version. If you switch Node versions and `weavz` disappears, reinstall it for the active version or run it with `npx -y @weavz-io/cli`.
 
-The package requires Node.js 22.13 or newer.
+The package and curl installer require Node.js 22.13 or newer.
 
 ## Login
 
