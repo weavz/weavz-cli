@@ -73,7 +73,7 @@ Waiting for approval...
 
 Open the URL in any browser, sign in to Weavz, choose or create a workspace, verify the code, and approve the CLI. This works even when the CLI runs inside SSH, a container, or a cloud IDE because the browser does not need to run on the same machine.
 
-On a local machine, `weavz login` tries to open the browser automatically. It does not open the browser by default in SSH sessions, containers, cloud IDEs, or CI. Use `--no-open` when you only want the URL printed:
+On a local interactive terminal, `weavz login` tries to open the browser automatically. It does not open the browser by default in SSH sessions, containers, cloud IDEs, CI, or non-interactive shells. Use `--no-open` when you only want the URL printed:
 
 ```bash
 weavz login --no-open
@@ -381,7 +381,7 @@ Open the printed `verification_uri_complete` URL and verify the code shown in th
 
 ### The browser does not open
 
-Use the printed URL. This is expected in SSH sessions, containers, cloud IDEs, and CI. On a local machine, retry with `--open` to force a browser open attempt:
+Use the printed URL. This is expected in SSH sessions, containers, cloud IDEs, CI, and non-interactive shells. On a local machine, retry with `--open` to force a browser open attempt:
 
 ```bash
 weavz login --open
