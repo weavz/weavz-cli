@@ -93,16 +93,64 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
 
           if npm view "@weavz-io/cli@${version}" version >/dev/null 2>&1; then
-            echo "@weavz-io/cli@${version} is already published; release finalization will be idempotent"
+            if [ "$DRY_RUN" = "false" ]; then
+              echo "@weavz-io/cli@${version} is already published. Bump package.json before publishing a new release."
+              exit 1
+            fi
+            echo "@weavz-io/cli@${version} is already published; dry-run validation will continue"
             echo "already_published=true" >> "$GITHUB_OUTPUT"
           else
             echo "already_published=false" >> "$GITHUB_OUTPUT"
           fi
 
-          npm pack --dry-run
+          pack_json="$(npm pack --dry-run --json)"
+          PACK_JSON="$pack_json" node <<'NODE'
+          const pack = JSON.parse(process.env.PACK_JSON || '[]')[0]
+          const actual = new Set((pack?.files || []).map(file => file.path))
+          const allowed = new Set([
+            'LICENSE',
+            'README.md',
+            'dist/cli.mjs',
+            'package.json',
+          ])
+          for (const file of actual) {
+            if (!allowed.has(file)) {
+              console.error(`Unexpected packed file ${file}`)
+              process.exit(1)
+            }
+          }
+          for (const file of allowed) {
+            if (!actual.has(file)) {
+              console.error(`Missing packed file ${file}`)
+              process.exit(1)
+            }
+          }
+          NODE
+
+          pack_file="$(npm pack --json | node -e "let data='';process.stdin.on('data',c=>data+=c);process.stdin.on('end',()=>{const pack=JSON.parse(data)[0];process.stdout.write(pack.filename)})")"
+          install_dir="$(mktemp -d)"
+          package_root="$PWD"
+          pushd "$install_dir" >/dev/null
+          npm init -y >/dev/null
+          npm install "$package_root/$pack_file" >/dev/null
+          bin_actual="$(./node_modules/.bin/weavz --version)"
+          if [ "$bin_actual" != "$version" ]; then
+            echo "Installed weavz bin version ${bin_actual} does not match package version ${version}"
+            exit 1
+          fi
+          popd >/dev/null
+          rm -rf "$install_dir" "$pack_file"
+
+          if grep -RInE 'X-Service-Key|service credentials|BetterAuth|QuickJS|Cloudflare|Wrangler|Drizzle|BullMQ|DATABASE_URL|SERVICE_KEY' README.md package.json dist LICENSE >/tmp/weavz-cli-release-denylist; then
+            echo "Public CLI package contains denied internal terms."
+            cat /tmp/weavz-cli-release-denylist
+            exit 1
+          fi
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
 
       - name: Publish to npm
-        if: inputs.dry_run == false && steps.package.outputs.already_published != 'true'
+        if: inputs.dry_run == false
         run: |
           if [ -n "$NODE_AUTH_TOKEN" ]; then
             npm publish --access public --provenance --tag "$NPM_TAG"

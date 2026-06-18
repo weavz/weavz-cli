@@ -20,18 +20,40 @@ The CLI signs in with an OAuth device-code flow, stores a scoped MCP OAuth token
 
 ## Installation
 
-Run without installing:
+Run without a persistent install:
 
 ```bash
 npx -y @weavz-io/cli login
 ```
 
-Install globally:
+Install globally when you want `weavz` available as a normal shell command:
 
 ```bash
 npm install -g @weavz-io/cli
+weavz --version
 weavz login
 ```
+
+Project-local installs do not add `weavz` to your interactive shell `PATH`; they create a project-local binary under `node_modules/.bin`. Use one of these forms inside that project:
+
+```bash
+npm install @weavz-io/cli
+npx weavz --help
+npm exec weavz -- actions list --json
+./node_modules/.bin/weavz --help
+```
+
+If `npm install -g @weavz-io/cli` succeeds but `weavz` still says `command not found`, your npm global bin directory is not on `PATH`. On zsh, check and fix it with:
+
+```bash
+NPM_PREFIX="$(npm prefix -g)"
+ls -l "$NPM_PREFIX/bin/weavz"
+printf '\nexport PATH="%s/bin:$PATH"\n' "$NPM_PREFIX" >> ~/.zshrc
+exec zsh -l
+weavz --version
+```
+
+With `nvm`, global packages are installed per Node.js version. If you switch Node versions and `weavz` disappears, reinstall it for the active version or run it with `npx -y @weavz-io/cli`.
 
 The package requires Node.js 22.13 or newer.
 
@@ -51,10 +73,16 @@ Waiting for approval...
 
 Open the URL in any browser, sign in to Weavz, choose or create a workspace, verify the code, and approve the CLI. This works even when the CLI runs inside SSH, a container, or a cloud IDE because the browser does not need to run on the same machine.
 
-On a local interactive terminal, `weavz login` may try to open the browser automatically. Use `--no-open` when you only want the URL printed:
+On a local machine, `weavz login` tries to open the browser automatically. It does not open the browser by default in SSH sessions, containers, cloud IDEs, or CI. Use `--no-open` when you only want the URL printed:
 
 ```bash
 weavz login --no-open
+```
+
+If the environment detector is too conservative, force a browser open attempt:
+
+```bash
+weavz login --open
 ```
 
 Use a custom host for development or self-hosted deployments:
@@ -133,7 +161,7 @@ JS
 Start OAuth device login.
 
 ```bash
-weavz login [--host <url>] [--profile <name>] [--no-open]
+weavz login [--host <url>] [--profile <name>] [--open] [--no-open]
 ```
 
 Options:
@@ -142,6 +170,7 @@ Options:
 | --- | --- | --- |
 | `--host <url>` | `https://platform.weavz.io` | Weavz API host |
 | `--profile <name>` | `default` | Local credential profile |
+| `--open` | auto | Force a browser open attempt |
 | `--no-open` | - | Print the browser URL without trying to open it |
 
 Environment:
@@ -207,7 +236,7 @@ weavz actions info <alias.action> [--json]
 weavz actions options <alias.action> <property> [--search <text>] [--input <json|@file|->] [--json]
 weavz actions validate <alias.action> [--input <json|@file|->] [--set <path=value>] [--set-json <path=json>] [--json]
 weavz actions exec <alias.action> [input flags] [--dry-run] [--explain] [--idempotency-key <key>] [--timeout <seconds>] [--wait-for-approval-seconds <0-60>] [--json]
-weavz run <alias.action> [input flags] [--dry-run] [--explain] [--idempotency-key <key>] [--json]
+weavz run <alias.action> [input flags] [--dry-run] [--explain] [--idempotency-key <key>] [--timeout <seconds>] [--wait-for-approval-seconds <0-60>] [--json]
 ```
 
 Canonical ids are `alias.functionName`, where `functionName` is the safe action name returned by `actions search`. Search can use natural language; execution never does. If a query returns several matches, pick one id and inspect it with `actions info`.
@@ -242,13 +271,15 @@ Resolve dynamic options before validation when a field advertises an options loo
 weavz actions options team_slack.send_channel_message channel --search eng --json
 ```
 
+`--idempotency-key` is used for approval request matching and retry coordination. Do not blindly retry side-effecting actions after an ambiguous network failure unless the response clearly returned `approval_required` or the CLI completed an auth refresh retry.
+
 If an action requires approval, the JSON envelope has `status: "approval_required"`, an `approval` object, links, and a `requestId` when available. Show the approval URL, then retry the same command with the same input and idempotency key after approval. To keep polling briefly:
 
 ```bash
 weavz run customer_gmail.send_email --input @email.json --idempotency-key email-001 --wait-for-approval-seconds 30 --json
 ```
 
-Direct action JSON output is always an envelope with stable keys: `status`, `id`, `alias`, `actionName`, `integrationName`, `inputKeys`, `output`, `approval`, `links`, `timings`, `requestId`, and `error`.
+Direct action JSON output is always an envelope with stable keys: `status`, `id`, `alias`, `functionName`, `actionName`, `integrationName`, `inputKeys`, `output`, `approval`, `links`, `timings`, `requestId`, and `error`.
 
 ### `weavz tools`
 
@@ -284,6 +315,8 @@ Agents should use the direct action path first:
 4. Build input as JSON, then run `weavz actions validate <alias.action> --input @input.json --json`.
 5. Execute with `weavz run <alias.action> --input @input.json --idempotency-key <stable-key> --json`.
 6. Use `weavz exec` only when the task genuinely needs a multi-step JavaScript workflow.
+
+For approvals, keep the same idempotency key when retrying after the user approves. For ambiguous network failures after execution starts, inspect status before retrying side-effecting commands.
 
 Example agent flow:
 
@@ -348,7 +381,13 @@ Open the printed `verification_uri_complete` URL and verify the code shown in th
 
 ### The browser does not open
 
-Use the printed URL. This is expected in SSH sessions, containers, and many cloud IDEs.
+Use the printed URL. This is expected in SSH sessions, containers, cloud IDEs, and CI. On a local machine, retry with `--open` to force a browser open attempt:
+
+```bash
+weavz login --open
+```
+
+When you intentionally want URL-only login:
 
 ```bash
 weavz login --no-open
